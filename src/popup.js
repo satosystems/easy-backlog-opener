@@ -2,113 +2,51 @@
 
 'use strict'
 
-import './popup.css'
+import axios from 'axios'
+import storage from './storage'
 
-;(function () {
-  // We will make use of Storage API to get and store `count` value
-  // More information on Storage API can we found at
-  // https://developer.chrome.com/extensions/storage
-
-  // To get storage access, we have to mention it in `permissions` property of manifest.json file
-  // More information on Permissions can we found at
-  // https://developer.chrome.com/extensions/declare_permissions
-  const counterStorage = {
-    get: cb => {
-      chrome.storage.sync.get(['count'], result => {
-        cb(result.count)
-      })
-    },
-    set: (value, cb) => {
-      chrome.storage.sync.set(
-        {
-          count: value
-        },
-        () => {
-          cb()
-        }
-      )
+document.addEventListener('DOMContentLoaded', async () => {
+  const ids = ['spaceId', 'apiKey']
+  for (let i = 0; i < ids.length; i++) {
+    const value = await storage.get(ids[i])
+    if (value === '') {
+      chrome.tabs.create({ url: 'options.html' })
+      return
     }
   }
 
-  function setupCounter (initialValue = 0) {
-    document.getElementById('counter').innerHTML = initialValue
-
-    document.getElementById('incrementBtn').addEventListener('click', () => {
-      updateCounter({
-        type: 'INCREMENT'
-      })
-    })
-
-    document.getElementById('decrementBtn').addEventListener('click', () => {
-      updateCounter({
-        type: 'DECREMENT'
-      })
-    })
-  }
-
-  function updateCounter ({ type }) {
-    counterStorage.get(count => {
-      let newCount
-
-      if (type === 'INCREMENT') {
-        newCount = count + 1
-      } else if (type === 'DECREMENT') {
-        newCount = count - 1
-      } else {
-        newCount = count
+  Promise.all([storage.get('spaceId'), storage.get('apiKey')]).then(async values => {
+    const spaceId = values[0]
+    const apiKey = values[1]
+    const api = {
+      get: async (path, params = []) => {
+        const query = params.reduce((acc, cur) => `${acc}&${encodeURIComponent(cur.key)}=${encodeURIComponent(cur.value)}`, `?apiKey=${apiKey}`)
+        const url = `https://${spaceId}.backlog.com${path}${query}`
+        return axios.get(url)
       }
-
-      counterStorage.set(newCount, () => {
-        document.getElementById('counter').innerHTML = newCount
-
-        // Communicate with content script of
-        // active tab by sending a message
-        chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-          const tab = tabs[0]
-
-          chrome.tabs.sendMessage(
-            tab.id,
-            {
-              type: 'COUNT',
-              payload: {
-                count: newCount
-              }
-            },
-            response => {
-              console.log('Current count value passed to contentScript file')
-            }
-          )
-        })
-      })
-    })
-  }
-
-  function restoreCounter () {
-    // Restore count value
-    counterStorage.get(count => {
-      if (typeof count === 'undefined') {
-        // Set counter value as 0
-        counterStorage.set(0, () => {
-          setupCounter(0)
-        })
-      } else {
-        setupCounter(count)
-      }
-    })
-  }
-
-  document.addEventListener('DOMContentLoaded', restoreCounter)
-
-  // Communicate with background file by sending a message
-  chrome.runtime.sendMessage(
-    {
-      type: 'GREETINGS',
-      payload: {
-        message: 'Hello, my name is Pop. I am from Popup.'
-      }
-    },
-    response => {
-      console.log(response.message)
     }
-  )
-})()
+    const res1 = await api.get('/api/v2/projects', [{ key: 'archived', value: 'false' }])
+    const res2 = await api.get('/api/v2/users/myself/recentlyViewedProjects', [{ key: 'count', value: '1' }])
+    const recentlyViewedProjectKey = res2.data[0] ? res2.data[0].project.projectKey : ''
+    const selectOfProjectKeys = document.getElementById('projectKeys')
+    res1.data.forEach(item => {
+      const option = document.createElement('option')
+      option.value = item.projectKey
+      option.textContent = item.projectKey
+      selectOfProjectKeys.appendChild(option)
+    })
+    selectOfProjectKeys.value = recentlyViewedProjectKey
+
+    const textOfNumber = document.getElementById('number')
+    textOfNumber.addEventListener('keypress', e => {
+      if (e.keyCode !== 13) { // 13 is key code of Enter
+        return false
+      }
+      const selectOfProjectKeys = document.getElementById('projectKeys')
+      const projectKey = selectOfProjectKeys.value
+      const number = textOfNumber.value
+      window.open(`https://${spaceId}.backlog.com/view/${projectKey}-${number}`, '_blank')
+    })
+    textOfNumber.focus()
+  })
+})
