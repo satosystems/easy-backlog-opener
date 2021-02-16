@@ -1,114 +1,55 @@
-/* global chrome */
+/* global chrome, fetch */
 
 'use strict'
 
-import './popup.css'
+import storage from './storage'
 
-;(function () {
-  // We will make use of Storage API to get and store `count` value
-  // More information on Storage API can we found at
-  // https://developer.chrome.com/extensions/storage
+document.addEventListener('DOMContentLoaded', () => {
+  Promise.all([storage.get('spaceId'), storage.get('apiKey')]).then(values => {
+    const spaceId = values[0]
+    const apiKey = values[1]
+    // Check if options are saved.
+    if (spaceId === '' || apiKey === '') {
+      chrome.tabs.create({ url: 'options.html' })
+      return
+    }
 
-  // To get storage access, we have to mention it in `permissions` property of manifest.json file
-  // More information on Permissions can we found at
-  // https://developer.chrome.com/extensions/declare_permissions
-  const counterStorage = {
-    get: cb => {
-      chrome.storage.sync.get(['count'], result => {
-        cb(result.count)
-      })
-    },
-    set: (value, cb) => {
-      chrome.storage.sync.set(
-        {
-          count: value
-        },
-        () => {
-          cb()
+    const api = {
+      get: async (path, params = []) => {
+        const query = params.reduce((acc, cur) => `${acc}&${encodeURIComponent(cur.key)}=${encodeURIComponent(cur.value)}`, `?apiKey=${apiKey}`)
+        const url = `https://${spaceId}.backlog.com${path}${query}`
+        const res = await fetch(url)
+        return res.json()
+      }
+    }
+
+    // Call Backlog API in parallel.
+    Promise.all([
+      api.get('/api/v2/projects', [{ key: 'archived', value: 'false' }]),
+      api.get('/api/v2/users/myself/recentlyViewedProjects', [{ key: 'count', value: '1' }])
+    ]).then(results => {
+      const selectOfProjectKeys = results[0].reduce((acc, cur) => {
+        const option = document.createElement('option')
+        option.value = cur.projectKey
+        option.textContent = cur.projectKey
+        acc.appendChild(option)
+        return acc
+      }, document.getElementById('projectKeys'))
+      const recentlyViewedProjectKey = results[1][0] ? results[1][0].project.projectKey : ''
+      selectOfProjectKeys.value = recentlyViewedProjectKey
+
+      const textOfNumber = document.getElementById('number')
+      textOfNumber.addEventListener('keypress', e => {
+        if (e.key !== 'Enter') {
+          return
         }
-      )
-    }
-  }
 
-  function setupCounter (initialValue = 0) {
-    document.getElementById('counter').innerHTML = initialValue
-
-    document.getElementById('incrementBtn').addEventListener('click', () => {
-      updateCounter({
-        type: 'INCREMENT'
+        const selectOfProjectKeys = document.getElementById('projectKeys')
+        const projectKey = selectOfProjectKeys.value
+        const number = textOfNumber.value
+        window.open(`https://${spaceId}.backlog.com/view/${projectKey}-${number}`, '_blank')
       })
+      textOfNumber.focus()
     })
-
-    document.getElementById('decrementBtn').addEventListener('click', () => {
-      updateCounter({
-        type: 'DECREMENT'
-      })
-    })
-  }
-
-  function updateCounter ({ type }) {
-    counterStorage.get(count => {
-      let newCount
-
-      if (type === 'INCREMENT') {
-        newCount = count + 1
-      } else if (type === 'DECREMENT') {
-        newCount = count - 1
-      } else {
-        newCount = count
-      }
-
-      counterStorage.set(newCount, () => {
-        document.getElementById('counter').innerHTML = newCount
-
-        // Communicate with content script of
-        // active tab by sending a message
-        chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-          const tab = tabs[0]
-
-          chrome.tabs.sendMessage(
-            tab.id,
-            {
-              type: 'COUNT',
-              payload: {
-                count: newCount
-              }
-            },
-            response => {
-              console.log('Current count value passed to contentScript file')
-            }
-          )
-        })
-      })
-    })
-  }
-
-  function restoreCounter () {
-    // Restore count value
-    counterStorage.get(count => {
-      if (typeof count === 'undefined') {
-        // Set counter value as 0
-        counterStorage.set(0, () => {
-          setupCounter(0)
-        })
-      } else {
-        setupCounter(count)
-      }
-    })
-  }
-
-  document.addEventListener('DOMContentLoaded', restoreCounter)
-
-  // Communicate with background file by sending a message
-  chrome.runtime.sendMessage(
-    {
-      type: 'GREETINGS',
-      payload: {
-        message: 'Hello, my name is Pop. I am from Popup.'
-      }
-    },
-    response => {
-      console.log(response.message)
-    }
-  )
-})()
+  })
+})
