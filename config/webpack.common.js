@@ -1,10 +1,10 @@
-'use strict';
+'use strict'
 
-const SizePlugin = require('size-plugin');
-const CopyWebpackPlugin = require('copy-webpack-plugin');
-const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const SizePlugin = require('size-plugin')
+const CopyWebpackPlugin = require('copy-webpack-plugin')
+const MiniCssExtractPlugin = require('mini-css-extract-plugin')
 
-const PATHS = require('./paths');
+const PATHS = require('./paths')
 
 // To re-use webpack configuration across templates,
 // CLI maintains a common webpack configuration file - `webpack.common.js`.
@@ -15,20 +15,20 @@ const common = {
     // the build folder to output bundles and assets in.
     path: PATHS.build,
     // the filename template for entry chunks
-    filename: '[name].js',
+    filename: '[name].js'
   },
   devtool: 'source-map',
   stats: {
     all: false,
     errors: true,
-    builtAt: true,
+    builtAt: true
   },
   module: {
     rules: [
       // Help webpack in understanding CSS files imported in .js files
       {
         test: /\.css$/,
-        use: [MiniCssExtractPlugin.loader, 'css-loader'],
+        use: [MiniCssExtractPlugin.loader, 'css-loader']
       },
       // Check for images imported in .js files and
       {
@@ -38,12 +38,12 @@ const common = {
             loader: 'file-loader',
             options: {
               outputPath: 'images',
-              name: '[name].[ext]',
-            },
-          },
-        ],
-      },
-    ],
+              name: '[name].[ext]'
+            }
+          }
+        ]
+      }
+    ]
   },
   plugins: [
     // Print file sizes
@@ -53,15 +53,15 @@ const common = {
       patterns: [
         {
           from: '**/*',
-          context: 'public',
-        },
+          context: 'public'
+        }
       ]
     }),
     // Extract CSS into separate files
     new MiniCssExtractPlugin({
-      filename: '[name].css',
-    }),
-  ],
-};
+      filename: '[name].css'
+    })
+  ]
+}
 
-module.exports = common;
+module.exports = common
